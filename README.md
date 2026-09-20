@@ -128,8 +128,8 @@ The collector only reads:
 
 ## Security and permissions
 
-- Runs entirely as your user. The plugin never calls `sudo`, `pkexec` or any
-  privileged helper, and never writes to system paths.
+- Runs entirely as your user. It never elevates privileges, never invokes an
+  authentication agent or privileged helper, and never writes to system paths.
 - No network access: the plugin makes no requests and downloads nothing.
 - It does not modify your `shell.json`; you control every setting.
 - The only child processes are the bundled Python collector and, on NVIDIA
