@@ -1,0 +1,15 @@
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local scratch
+/tmp/
+/screenshots/

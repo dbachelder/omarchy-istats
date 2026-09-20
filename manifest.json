@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.dbachelder.istats",
+  "name": "iStats",
+  "version": "1.1.0",
+  "author": "dbachelder",
+  "license": "MIT",
+  "description": "iStat Menus-style system monitor: network throughput, CPU, GPU, memory and storage in one bar entry. Each reading is its own click target, and the dropdown opens focused on the domain you clicked.",
+  "repository": "https://github.com/dbachelder/omarchy-istats",
+  "homepage": "https://github.com/dbachelder/omarchy-istats",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "iStats",
+    "description": "iStat Menus-style multi-metric monitor: network, CPU, GPU, memory and disk in the bar, each a click target into a focused dashboard.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "intervalSec": 1,
+      "colorful": true,
+      "showNet": true,
+      "showCpu": true,
+      "showGpu": true,
+      "showMem": true,
+      "showSsd": true,
+      "processCount": 6
+    },
+    "schema": [
+      {
+        "key": "intervalSec",
+        "type": "integer",
+        "label": "Sample interval (seconds)",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "defaultValue": 1
+      },
+      {
+        "key": "colorful",
+        "type": "boolean",
+        "label": "Colourful iStats palette",
+        "defaultValue": true
+      },
+      {
+        "key": "showNet",
+        "type": "boolean",
+        "label": "Show network in bar",
+        "defaultValue": true
+      },
+      {
+        "key": "showCpu",
+        "type": "boolean",
+        "label": "Show CPU in bar",
+        "defaultValue": true
+      },
+      {
+        "key": "showGpu",
+        "type": "boolean",
+        "label": "Show GPU in bar",
+        "defaultValue": true
+      },
+      {
+        "key": "showMem",
+        "type": "boolean",
+        "label": "Show memory in bar",
+        "defaultValue": true
+      },
+      {
+        "key": "showSsd",
+        "type": "boolean",
+        "label": "Show disk in bar",
+        "defaultValue": true
+      },
+      {
+        "key": "processCount",
+        "type": "integer",
+        "label": "Processes listed",
+        "min": 3,
+        "max": 12,
+        "step": 1,
+        "defaultValue": 6
+      }
+    ]
+  }
+}
