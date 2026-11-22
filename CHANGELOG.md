@@ -3,6 +3,16 @@
 All notable changes to this plugin. Versions follow the `version` field in
 `manifest.json`.
 
+## Unreleased
+
+- Intel GPU support (`i915` and `xe` drivers): the GPU reading and card now show
+  utilisation and clock on machines without an NVIDIA card. Frequency comes from
+  sysfs; utilisation comes from per-process DRM fdinfo engine busy-time, which
+  needs no elevated privileges.
+- The GPU clock ring scales to the GPU's own maximum frequency instead of a fixed
+  3 GHz, and the MEM ring shows `--` with a "Shared memory" label for GPUs that
+  report no dedicated memory.
+
 ## 1.1.0
 
 - Clicking a reading in the bar opens the dashboard focused on that domain, with

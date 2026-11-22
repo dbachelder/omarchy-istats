@@ -923,7 +923,7 @@ BarWidget {
                     value: (Number(root.gpu.mem_used) || 0) / Math.max(1, Number(root.gpu.mem_total) || 1)
                     fillColor: root.gpuColor
                     textColor: root.panelInk
-                    headline: root.pct((Number(root.gpu.mem_used) || 0) / Math.max(1, Number(root.gpu.mem_total) || 1) * 100)
+                    headline: root.gpu.mem_total ? root.pct((Number(root.gpu.mem_used) || 0) / Math.max(1, Number(root.gpu.mem_total) || 1) * 100) : "--"
                     caption: "MEM"
                     headlineSize: Style.font.title
                 }
@@ -940,7 +940,7 @@ BarWidget {
                 Ring {
                     width: (parent.width - Style.space(18)) / 4
                     height: width
-                    value: Math.min(1, (Number(root.gpu.clock_mhz) || 0) / 3000)
+                    value: Math.min(1, (Number(root.gpu.clock_mhz) || 0) / (Number(root.gpu.clock_max_mhz) || 3000))
                     fillColor: root.gpuColor
                     textColor: root.panelInk
                     headline: ((Number(root.gpu.clock_mhz) || 0) / 1000).toFixed(2)
@@ -953,7 +953,7 @@ BarWidget {
                 width: parent.width
                 Text {
                     id: vramText
-                    text: root.fmtBytes(root.gpu.mem_used) + " / " + root.fmtBytes(root.gpu.mem_total)
+                    text: root.gpu.mem_total ? root.fmtBytes(root.gpu.mem_used) + " / " + root.fmtBytes(root.gpu.mem_total) : (root.gpu.vendor === "intel" ? "Shared memory" : "")
                     color: Util.alpha(root.panelInk, 0.6)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
