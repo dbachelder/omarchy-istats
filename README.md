@@ -22,7 +22,7 @@ dropdown opens focused on whichever reading you clicked.
 |------|----------|
 | CPU | frequency, package temperature, user/system history, a ring per logical thread, thread count |
 | Processes | top processes by CPU, or by memory when memory is focused |
-| GPU | utilisation, VRAM, temperature and clock dials, VRAM total and power draw |
+| GPU | utilisation, VRAM, temperature and clock dials, VRAM total and power draw (NVIDIA); utilisation and clock on Intel, with shared memory |
 | Memory | used percentage, history, total / free / swap |
 | Disk | root filesystem usage, free space, read/write history |
 | Network | download and upload graphs (independently scaled), interface and lifetime totals |
@@ -58,8 +58,9 @@ Available methods: `open`, `close`, `toggle`, `overview`, `showCpu`, `showGpu`,
 - Omarchy with the Quickshell shell (bar widget plugin API).
 - `python3` — standard library only; no `psutil`, no `pynvml`, nothing to install.
 - Linux `/proc` and `/sys`.
-- Optional: an NVIDIA GPU with `nvidia-smi` on `PATH` for the GPU card and the GPU
-  bar reading. Everything else works without it.
+- Optional, for the GPU card and the GPU bar reading (everything else works without it):
+  - an NVIDIA GPU with `nvidia-smi` on `PATH`, or
+  - an Intel GPU using the `i915` or `xe` driver (no extra tools needed).
 
 ## Install
 
@@ -125,6 +126,9 @@ The collector only reads:
   `/proc/net/route`, `/proc/diskstats`, `/proc/self/mountinfo`, `/proc/<pid>/stat`
 - `/sys/class/hwmon/*`, `/sys/devices/system/cpu/*/cpufreq/*`
 - `nvidia-smi --query-gpu=...` when an NVIDIA GPU is present
+- On Intel GPUs: `/sys/class/drm/card*/gt_*_freq_mhz` for the clock and
+  `/proc/<pid>/fdinfo/*` (DRM engine busy-time) for utilisation, plus a one-off
+  `lspci -s <slot> -mm` to look up the device name
 
 ## Security and permissions
 
@@ -133,7 +137,7 @@ The collector only reads:
 - No network access: the plugin makes no requests and downloads nothing.
 - It does not modify your `shell.json`; you control every setting.
 - The only child processes are the bundled Python collector and, on NVIDIA
-  systems, `nvidia-smi`.
+  systems, `nvidia-smi` (and a single `lspci` call on Intel systems).
 
 ## Known limitations
 
@@ -142,8 +146,14 @@ The collector only reads:
   CPU-sorted process list rather than a domain-specific hog list. CPU and memory
   hog lists are exact.
 - The memory hog list includes kernel threads, which can outrank user processes.
-- GPU readings require an NVIDIA card with `nvidia-smi`. Imported AMD/Intel
-  telemetry is not implemented yet.
+- GPU readings are supported for NVIDIA (via `nvidia-smi`) and Intel (`i915`/`xe`).
+  AMD telemetry is not implemented yet.
+- Intel GPU utilisation is the busiest engine (render, video, ...) summed across
+  your own processes' DRM fdinfo counters. The hardware PMU that `intel_gpu_top`
+  uses needs elevated privileges, so work done by other users' processes is not
+  counted. Intel GPUs report no VRAM (shared memory), temperature or power, so
+  those show `--`. The clock falls back to the requested frequency while the GPU
+  sleeps in RC6. The `xe` driver path is untested.
 
 ## License
 

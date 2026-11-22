@@ -3,8 +3,8 @@
 
 Reads /proc and sysfs directly (no third-party modules) and prints one compact
 JSON object per tick on stdout, flushed, so the QML side can consume it with a
-SplitParser. GPU fields come from nvidia-smi when an NVIDIA card is present and
-degrade to null otherwise. Every section is independently guarded: one missing
+SplitParser. GPU fields come from nvidia-smi when an NVIDIA card is present,
+from sysfs + DRM fdinfo on Intel, and degrade to null otherwise. Every section is independently guarded: one missing
 file must not take the whole stream down.
 """
 
@@ -335,6 +335,151 @@ def nvidia_gpus():
     return gpus
 
 
+# Intel (i915 / xe): frequency from sysfs, utilization from DRM fdinfo.
+# The i915 perf PMU (what intel_gpu_top uses) needs perf_event_paranoid<=0 or
+# CAP_PERFMON, so instead sum engine busy-time (ns) across this user's DRM
+# clients in /proc/<pid>/fdinfo. That only sees our own processes, which
+# includes the compositor and browsers, i.e. the bulk of desktop GPU load.
+_intel_name = {}
+
+
+def intel_cards():
+    cards = []
+    base = "/sys/class/drm"
+    try:
+        entries = sorted(os.listdir(base))
+    except OSError:
+        return cards
+    for entry in entries:
+        if not (entry.startswith("card") and entry[4:].isdigit()):
+            continue
+        try:
+            driver = os.path.basename(os.readlink(f"{base}/{entry}/device/driver"))
+            slot = os.path.basename(os.readlink(f"{base}/{entry}/device"))
+        except OSError:
+            continue
+        if driver in ("i915", "xe"):
+            cards.append((f"{base}/{entry}", slot))
+    return cards
+
+
+def intel_name(slot):
+    if slot not in _intel_name:
+        name = "Intel Graphics"
+        try:
+            out = subprocess.run(
+                ["lspci", "-s", slot, "-mm"], capture_output=True, text=True, timeout=2, check=False
+            ).stdout
+            fields = [f for f in out.replace('"', "\0").split("\0") if f.strip()]
+            # fields: slot, class, vendor, device, ...
+            if len(fields) >= 4:
+                name = "Intel " + fields[3].strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+        _intel_name[slot] = name
+    return _intel_name[slot]
+
+
+def drm_engine_ns():
+    """{(pdev, client_id, pid): {engine: (busy_ns, capacity)}} for readable fdinfo."""
+    clients = {}
+    try:
+        pids = [p for p in os.listdir("/proc") if p.isdigit()]
+    except OSError:
+        return clients
+    for pid in pids:
+        fd_dir = f"/proc/{pid}/fdinfo"
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for fd in fds:
+            raw = read(f"{fd_dir}/{fd}")
+            if not raw or "drm-driver" not in raw:
+                continue
+            info = {}
+            for line in raw.splitlines():
+                key, _, value = line.partition(":")
+                if key.startswith("drm-"):
+                    info[key] = value.strip()
+            if info.get("drm-driver") not in ("i915", "xe"):
+                continue
+            ident = (info.get("drm-pdev"), info.get("drm-client-id"), pid)
+            engines = {}
+            for key, value in info.items():
+                if key.startswith("drm-engine-") and not key.startswith(
+                    ("drm-engine-capacity-", "drm-engine-gt")
+                ):
+                    try:
+                        busy = int(value.split()[0])
+                    except (ValueError, IndexError):
+                        continue
+                    cap = 1
+                    try:
+                        cap = int(info.get("drm-engine-capacity-" + key[11:], 1))
+                    except ValueError:
+                        pass
+                    engines[key[11:]] = (busy, max(cap, 1))
+            if engines:
+                clients[ident] = engines
+    return clients
+
+
+def intel_gpus(previous):
+    cards = intel_cards()
+    if not cards:
+        return []
+    now = time.monotonic()
+    clients = drm_engine_ns()
+    prev_clients = previous.get("intel_clients")
+    prev_time = previous.get("intel_time")
+    previous["intel_clients"] = clients
+    previous["intel_time"] = now
+    util = None
+    if prev_clients is not None and prev_time is not None and now > prev_time:
+        per_engine = {}
+        capacity = {}
+        for ident, engines in clients.items():
+            before = prev_clients.get(ident)
+            if before is None:
+                continue
+            for engine, (busy, cap) in engines.items():
+                if engine in before:
+                    delta = busy - before[engine][0]
+                    if delta > 0:
+                        per_engine[engine] = per_engine.get(engine, 0) + delta
+                capacity[engine] = cap
+        span = (now - prev_time) * 1e9
+        # Overall load = busiest engine (render, video, ...), like a GPU "util".
+        fractions = [per_engine.get(e, 0) / (span * capacity[e]) for e in capacity]
+        util = round(min(100.0, max(fractions, default=0.0) * 100), 1)
+    gpus = []
+    for path, slot in cards:
+        act = read_int(f"{path}/gt_act_freq_mhz")
+        if not act:  # 0 while the GPU sleeps in RC6; show the requested clock instead
+            act = read_int(f"{path}/gt_cur_freq_mhz", act)
+        top = read_int(f"{path}/gt_RP0_freq_mhz") or read_int(f"{path}/gt_max_freq_mhz")
+        gpus.append(
+            {
+                "vendor": "intel",
+                "name": intel_name(slot),
+                "util": util,
+                "mem_util": None,
+                "mem_used": None,
+                "mem_total": None,
+                "temp": None,
+                "power": None,
+                "power_limit": None,
+                "clock_mhz": float(act) if act is not None else None,
+                "clock_max_mhz": float(top) if top is not None else None,
+                "mem_clock_mhz": None,
+                "fan_pct": None,
+            }
+        )
+    return gpus[:1]
+
+
+
 # ---------------------------------------------------------------- PROCESSES
 _PROC_BASE = {}
 _BOOT_WALL = time.time() - float((read("/proc/uptime", "0") or "0").split()[0])
@@ -444,7 +589,7 @@ def snapshot(previous):
 
     read_bps, write_bps = disk_io()
     name, down, up, rx, tx = interface_stats()
-    gpus = nvidia_gpus()
+    gpus = nvidia_gpus() or intel_gpus(previous)
     procs_cpu, procs_mem = processes()
     uptime = float((read("/proc/uptime", "0") or "0").split()[0] or 0)
     try:
